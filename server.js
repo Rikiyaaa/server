@@ -189,6 +189,10 @@ async function initializeGame() {
   }
 }
 function startAuction() {
+
+   // เพิ่มโค้ดนี้
+  console.log("Starting auction with pokemon count:", auctionPool.length);
+  
   if (players.length < 3) {
     io.emit('notification', 'Need at least 3 players to start the auction.');
     return;
