@@ -17,17 +17,12 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-<<<<<<< HEAD
-    origin: '*',
-=======
     origin: "*",
->>>>>>> 54b40415114db9ae2e1214a2672ec52a6604ecb5
     methods: ['GET', 'POST']
   }
 });
 
 // Connect to MongoDB
-mongoose
 mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://pokemons:20762newsa@cluster0.8uspm5l.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', { 
   useNewUrlParser: true, 
   useUnifiedTopology: true
