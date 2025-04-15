@@ -58,6 +58,7 @@ let externalVoters = new Set(); // For players who voted from login screen
 let cardSelectionTimeout = null;
 // Add to the initialization function
 // Remove the automatic timer in initializing game
+// Initialize a new game
 function initializeGame() {
   // Reset game state
   gameState = 'waiting';
@@ -147,6 +148,52 @@ async function fetchRandomPokemon(count = 18) {
     return [];
   }
 }
+
+// เพิ่มฟังก์ชันใหม่เพื่อตรวจสอบว่าครบเงื่อนไขเริ่มประมูลหรือยัง
+function checkCardsSelection() {
+  if (gameState !== 'cardSelection') return;
+  
+  const connectedPlayers = players.filter(p => p.connected);
+  const playersSelected = Array.from(playerCards.keys()).length;
+  
+  if (playersSelected >= connectedPlayers.length) {
+    // แจ้งเตือนผู้เล่นว่าการประมูลกำลังจะเริ่ม
+    io.emit('notification', 'All players have selected cards! Auction will begin in 5 seconds...');
+    
+    // ล้าง timeout เดิมถ้ามี
+    if (cardSelectionTimeout) {
+      clearTimeout(cardSelectionTimeout);
+      cardSelectionTimeout = null;
+    }
+    
+    // ตั้ง timeout ใหม่
+    setTimeout(() => {
+      gameState = 'auction';
+      io.emit('gameState', 'auction');
+      
+      // จัดเรียงผู้เล่นตามค่าการ์ด
+      playerPositions = [];
+      for (const player of players) {
+        if (playerCards.has(player.id)) {
+          playerPositions.push(player.id);
+        }
+      }
+      playerPositions.sort((a, b) => {
+        return playerCards.get(a) - playerCards.get(b);
+      });
+      
+      // กำหนดตำแหน่งการประมูลให้แต่ละผู้เล่น
+      players.forEach(player => {
+        const position = playerPositions.indexOf(player.id) + 1;
+        player.bidPosition = position;
+      });
+      
+      // เริ่มประมูล Pokemon ตัวแรก
+      nextPokemon();
+    }, 5000); // รอ 5 วินาทีก่อนเปลี่ยนสถานะเกม
+  }
+}
+
 function calculateRarity(pokemonData) {
   // This is a simple implementation
   // You could make this more sophisticated based on:
@@ -163,37 +210,7 @@ function calculateRarity(pokemonData) {
   if (statTotal > 150) return 'Uncommon';
   return 'Common';
 }
-// Initialize a new game
-async function initializeGame() {
-  // Reset game state
-  gameState = 'waiting';
-  players = [];
-  currentPokemon = null;
-  auctionPool = await fetchRandomPokemon(18);
-  poolPokemon = [];
-  currentBid = 0;
-  currentBidder = null;
-  clearInterval(auctionTimer);
-  
-  // Save initial game state to database
-  try {
-    await Game.findOneAndUpdate(
-      {}, 
-      { 
-        state: gameState,
-        players: [],
-        auctionPool,
-        poolPokemon,
-        currentPokemonIndex: null,
-        currentBid,
-        currentBidder: null
-      },
-      { upsert: true, new: true }
-    );
-  } catch (error) {
-    console.error('Error initializing game in database:', error);
-  }
-}
+
 function startAuction() {
   console.log("Starting card selection phase with player count:", players.length);
   
@@ -210,16 +227,18 @@ function startAuction() {
   io.emit('selectCardsPhase');
   io.emit('notification', 'Please select your cards to determine bidding order!');
   
-  // Remove the automated timer that forces auction to start
-  // We'll only transition to auction when all players have selected cards
+  // ล้าง timeout เดิมถ้ามี
   if (cardSelectionTimeout) {
     clearTimeout(cardSelectionTimeout);
-    cardSelectionTimeout = null;
   }
-}
   
-  // Wait for players to select cards (10 seconds)
+  // ตั้ง timeout ใหม่สำหรับผู้เล่นที่ไม่เลือกการ์ด
   cardSelectionTimeout = setTimeout(() => {
+    // ตรวจสอบว่ายังอยู่ในเฟสการเลือกการ์ดหรือไม่
+    if (gameState !== 'cardSelection') {
+      return;
+    }
+    
     // Assign random positions to players who didn't select
     players.filter(p => p.connected).forEach(player => {
       if (!playerCards.has(player.id)) {
@@ -240,28 +259,10 @@ function startAuction() {
       }
     });
     
-    // Sort players by their card values
-    playerPositions = [];
-    for (const player of players.filter(p => p.connected)) {
-      if (playerCards.has(player.id)) {
-        playerPositions.push(player.id);
-      }
-    }
-    playerPositions.sort((a, b) => {
-      return playerCards.get(a) - playerCards.get(b);
-    });
-    
-    // Set bidding position property for each player
-    players.forEach(player => {
-      const position = playerPositions.indexOf(player.id) + 1;
-      player.bidPosition = position;
-    });
-    
-    // Start actual auction
-    gameState = 'auction';
-    io.emit('gameState', 'auction');
-    nextPokemon();
-  }, 30000);
+    // เรียกใช้ checkCardsSelection เพื่อเริ่มการประมูล
+    checkCardsSelection();
+  }, 30000); // ให้เวลาผู้เล่น 30 วินาทีในการเลือกการ์ด
+}
 
 // Function to get the next bidder in the cycle
 function getNextBidder() {
@@ -1262,47 +1263,31 @@ function handlePass(player) {
     
     // Check if all connected players have selected cards
     if (playersSelected >= connectedPlayers.length) {
-      // แจ้งเตือนผู้เล่นว่าการประมูลกำลังจะเริ่ม ให้เตรียมตัว
-      io.emit('notification', 'All players have selected cards! Auction will begin in 5 seconds...');
-      
-      setTimeout(() => {
-        gameState = 'auction';
-        io.emit('gameState', 'auction');
-        
-        // จัดเรียงผู้เล่นตามค่าการ์ด
-        playerPositions = [];
-        for (const player of players) {
-          if (playerCards.has(player.id)) {
-            playerPositions.push(player.id);
-          }
-        }
-        playerPositions.sort((a, b) => {
-          return playerCards.get(a) - playerCards.get(b);
-        });
-        
-        // กำหนดตำแหน่งการประมูลให้แต่ละผู้เล่น
-        players.forEach(player => {
-          const position = playerPositions.indexOf(player.id) + 1;
-          player.bidPosition = position;
-        });
-        
-        // แจ้งเตือนว่าการประมูลกำลังเริ่ม
-        io.emit('notification', 'Auction is starting now! Get ready to bid!');
-        
-        // รอเพิ่มอีก 5 วินาทีก่อนจะเริ่มประมูล Pokemon ตัวแรก
-        setTimeout(() => {
-          // เริ่มการประมูล Pokemon ตัวแรก
-          nextPokemon();
-        }, 30000); // รอ 5 วินาทีก่อนเริ่มประมูลตัวแรก
-        
-      }, 15000); // รอ 3 วินาทีก่อนเปลี่ยนสถานะเกม
+      // Call checkCardsSelection to handle auction start logic
+      checkCardsSelection();
     }
     
     callback({ success: true });
   });
 
-  // Handle player joining the game
- // Update the joinGame handler
+// เพิ่ม event handler นี้
+socket.on('startGame', () => {
+  // ตรวจสอบว่าอยู่ในสถานะ waiting หรือไม่
+  if (gameState !== 'waiting') {
+    socket.emit('notification', 'Game is already in progress.');
+    return;
+  }
+  
+  // ตรวจสอบผู้เล่นให้มีอย่างน้อย 3 คน
+  if (players.filter(p => p.connected).length < 3) {
+    socket.emit('notification', 'Need at least 3 players to start the game.');
+    return;
+  }
+  
+  // เริ่มเฟสการเลือกการ์ด
+  startAuction();
+});
+
 // Update the joinGame handler to ensure it doesn't trigger the timer prematurely
 socket.on('joinGame', async ({ name }, callback) => {
   // Check for existing player by name
@@ -1387,11 +1372,6 @@ socket.on('joinGame', async ({ name }, callback) => {
       playerName: newPlayer.name, 
       playerCount: players.length 
     });
-  }
-  
-  // Start card selection phase if enough players and in waiting state
-  if (players.length >= 3 && gameState === 'waiting') {
-    setTimeout(startAuction, 4000); // Start the card selection phase after 3 seconds
   }
 });
   
