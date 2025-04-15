@@ -1298,9 +1298,9 @@ function handlePass(player) {
         setTimeout(() => {
           // เริ่มการประมูล Pokemon ตัวแรก
           nextPokemon();
-        }, 5000); // รอ 5 วินาทีก่อนเริ่มประมูลตัวแรก
+        }, 30000); // รอ 5 วินาทีก่อนเริ่มประมูลตัวแรก
         
-      }, 3000); // รอ 3 วินาทีก่อนเปลี่ยนสถานะเกม
+      }, 15000); // รอ 3 วินาทีก่อนเปลี่ยนสถานะเกม
     }
     
     callback({ success: true });
@@ -1396,7 +1396,7 @@ socket.on('joinGame', async ({ name }, callback) => {
   
   // Start card selection phase if enough players and in waiting state
   if (players.length >= 3 && gameState === 'waiting') {
-    setTimeout(startAuction, 15000); // Start the card selection phase after 3 seconds
+    setTimeout(startAuction, 1500); // Start the card selection phase after 3 seconds
   }
 });
   
