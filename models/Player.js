@@ -51,4 +51,5 @@ const PlayerSchema = new Schema({
 // สร้าง index ที่เป็น unique แบบหลายฟิลด์เพื่อให้สามารถมี socketId ซ้ำได้ในเกมคนละรอบ
 PlayerSchema.index({ name: 1, lastGameId: 1 }, { unique: true });
 
-module.exports = mongoose.models.Player || mongoose.model("Player", PlayerSchema);
+const Player = mongoose.model("Player", PlayerSchema);
+module.exports = Player;
