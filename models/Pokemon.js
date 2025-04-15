@@ -37,5 +37,12 @@ const PokemonSchema = new mongoose.Schema({
   }
 });
 
-const Pokemon = mongoose.model("Pokemon", PokemonSchema);
-module.exports = Pokemon;
+// Use a different pattern to check for existing models
+let PokemonModel;
+try {
+  PokemonModel = mongoose.model("Pokemon");
+} catch (error) {
+  PokemonModel = mongoose.model("Pokemon", PokemonSchema);
+}
+
+module.exports = PokemonModel;
