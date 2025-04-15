@@ -9,13 +9,14 @@ const PlayerSchema = new Schema({
   name: {
     type: String,
     required: true,
-    unique: true    // เปลี่ยนให้ name เป็น unique แทน socketId
+    unique: true
   },
   balance: {
     type: Number,
     default: 5000
   },
-  collection: [{
+  // Rename "collection" to "pokemonCollection" to avoid conflicts
+  pokemonCollection: [{
     id: Number,
     name: String,
     image: String
@@ -27,18 +28,18 @@ const PlayerSchema = new Schema({
   bidPosition: {
     type: Number
   },
-  cardValue: {     // เพิ่มค่าการ์ดที่ผู้เล่นเลือก
+  cardValue: {
     type: Number
   },
-  connected: {     // เพิ่มสถานะการเชื่อมต่อ
+  connected: {
     type: Boolean,
     default: true
   },
-  disconnectedAt: {  // เพิ่มเวลาที่ตัดการเชื่อมต่อ
+  disconnectedAt: {
     type: Date,
     default: null
   },
-  lastGameId: {    // เพิ่มอ้างอิงถึงเกมล่าสุดที่เล่น
+  lastGameId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Game'
   },
@@ -48,8 +49,15 @@ const PlayerSchema = new Schema({
   }
 });
 
-// สร้าง index ที่เป็น unique แบบหลายฟิลด์เพื่อให้สามารถมี socketId ซ้ำได้ในเกมคนละรอบ
+// Create a compound unique index
 PlayerSchema.index({ name: 1, lastGameId: 1 }, { unique: true });
 
-const Player = mongoose.model("Player", PlayerSchema);
-module.exports = Player;
+// Use a different pattern to check for existing models
+let PlayerModel;
+try {
+  PlayerModel = mongoose.model("Player");
+} catch (error) {
+  PlayerModel = mongoose.model("Player", PlayerSchema);
+}
+
+module.exports = PlayerModel;
