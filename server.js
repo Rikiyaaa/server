@@ -294,52 +294,60 @@ function nextPokemon() {
     return;
   }
   
-  // Reset skipped players for the new Pokemon
-  skippedPlayers = [];
+  // แจ้งเตือนว่ากำลังจะเริ่มประมูล Pokemon ตัวใหม่
+  io.emit('bidNotification', 'Next Pokemon will be revealed in 5 seconds...');
   
-  // Get the next Pokemon
-  currentPokemon = auctionPool.pop();
-  currentBid = currentPokemon.basePrice || 100;
-  currentBidder = null;
-  
-  // Check if any player can afford the current Pokemon
-  const anyPlayerCanAfford = players.some(player => player.balance >= currentBid);
-  
-  // Set preview mode if no player can afford this Pokemon
-  const isPreviewMode = !anyPlayerCanAfford;
-  timeLeft = isPreviewMode ? 10 : 30; // Shorter preview time if no one can afford
-  
-  // Reset bidder index for new Pokemon
-  currentBidderIndex = 0;
-  
-  // Notify clients about preview mode if active
-  if (isPreviewMode) {
-    io.emit('bidNotification', `No player can afford ${currentPokemon.name}. Preview mode activated (10s).`);
-  }
-  
-  // Start the auction for this Pokemon
-  updateAuctionState();
-  
-  // Start timer - THIS IS WHERE THE AUCTION TIMER ACTUALLY STARTS
-  clearInterval(auctionTimer);
-  auctionTimer = setInterval(() => {
-    if (timeLeft <= 0) {
-      clearInterval(auctionTimer);
-      endAuction();
-      return;
+  // รอ 5 วินาทีก่อนแสดง Pokemon ตัวต่อไป
+  setTimeout(() => {
+    // Reset skipped players for the new Pokemon
+    skippedPlayers = [];
+    
+    // Get the next Pokemon
+    currentPokemon = auctionPool.pop();
+    currentBid = currentPokemon.basePrice || 100;
+    currentBidder = null;
+    
+    // Check if any player can afford the current Pokemon
+    const anyPlayerCanAfford = players.some(player => player.balance >= currentBid);
+    
+    // Set preview mode if no player can afford this Pokemon
+    const isPreviewMode = !anyPlayerCanAfford;
+    timeLeft = isPreviewMode ? 10 : 30; // Shorter preview time if no one can afford
+    
+    // Reset bidder index for new Pokemon
+    currentBidderIndex = 0;
+    
+    // Notify clients about preview mode if active
+    if (isPreviewMode) {
+      io.emit('bidNotification', `No player can afford ${currentPokemon.name}. Preview mode activated (10s).`);
+    } else {
+      io.emit('bidNotification', `${currentPokemon.name} is now up for auction! Starting bid: ${currentBid} coins.`);
     }
-    timeLeft--;
+    
+    // Start the auction for this Pokemon
     updateAuctionState();
-  }, 1000);
-  
-  // Only set next bidder if not in preview mode
-  if (!isPreviewMode) {
-    setNextBidder();
-  } else {
-    // In preview mode, we don't set a bidder
-    currentBidderTurn = null;
-    io.emit('auctionUpdate', getAuctionState());
-  }
+    
+    // Start timer - THIS IS WHERE THE AUCTION TIMER ACTUALLY STARTS
+    clearInterval(auctionTimer);
+    auctionTimer = setInterval(() => {
+      if (timeLeft <= 0) {
+        clearInterval(auctionTimer);
+        endAuction();
+        return;
+      }
+      timeLeft--;
+      updateAuctionState();
+    }, 1000);
+    
+    // Only set next bidder if not in preview mode
+    if (!isPreviewMode) {
+      setNextBidder();
+    } else {
+      // In preview mode, we don't set a bidder
+      currentBidderTurn = null;
+      io.emit('auctionUpdate', getAuctionState());
+    }
+  }, 5000); // รอ 5 วินาทีก่อนแสดง Pokemon
 }
 
 function handlePass(player) {
@@ -1259,14 +1267,14 @@ function handlePass(player) {
     
     // Check if all connected players have selected cards
     if (playersSelected >= connectedPlayers.length) {
-      // If all players have selected, start auction phase after a moment
-      io.emit('notification', 'All players have selected cards! Starting auction in 3 seconds...');
+      // แจ้งเตือนผู้เล่นว่าการประมูลกำลังจะเริ่ม ให้เตรียมตัว
+      io.emit('notification', 'All players have selected cards! Auction will begin in 5 seconds...');
       
       setTimeout(() => {
         gameState = 'auction';
         io.emit('gameState', 'auction');
         
-        // Sort players by card value
+        // จัดเรียงผู้เล่นตามค่าการ์ด
         playerPositions = [];
         for (const player of players) {
           if (playerCards.has(player.id)) {
@@ -1277,15 +1285,22 @@ function handlePass(player) {
           return playerCards.get(a) - playerCards.get(b);
         });
         
-        // Assign bidding positions to each player
+        // กำหนดตำแหน่งการประมูลให้แต่ละผู้เล่น
         players.forEach(player => {
           const position = playerPositions.indexOf(player.id) + 1;
           player.bidPosition = position;
         });
         
-        // Now start the first Pokemon auction
-        nextPokemon();
-      }, 3000); // Wait 3 seconds before starting auction
+        // แจ้งเตือนว่าการประมูลกำลังเริ่ม
+        io.emit('notification', 'Auction is starting now! Get ready to bid!');
+        
+        // รอเพิ่มอีก 5 วินาทีก่อนจะเริ่มประมูล Pokemon ตัวแรก
+        setTimeout(() => {
+          // เริ่มการประมูล Pokemon ตัวแรก
+          nextPokemon();
+        }, 5000); // รอ 5 วินาทีก่อนเริ่มประมูลตัวแรก
+        
+      }, 3000); // รอ 3 วินาทีก่อนเปลี่ยนสถานะเกม
     }
     
     callback({ success: true });
