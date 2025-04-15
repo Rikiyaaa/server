@@ -319,7 +319,7 @@ function nextPokemon() {
     }
     timeLeft--;
     updateAuctionState();
-  }, 500);
+  }, 1000);
   
   // Only set next bidder if not in preview mode
   if (!isPreviewMode) {
