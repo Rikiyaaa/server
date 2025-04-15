@@ -204,11 +204,12 @@ function startAuction() {
   
   gameState = 'cardSelection';
   io.emit('selectCardsPhase');
+  io.emit('notification', 'Please select your cards to determine bidding order!');
   
-  // Clear any previous timeouts to prevent multiple transitions
-  if (cardSelectionTimeout) {
-    clearTimeout(cardSelectionTimeout);
-  }
+  // ไม่ต้องมี timeout ที่จะบังคับเริ่ม auction
+  // แทนที่จะเริ่ม auction ด้วย timer เราจะรอให้ทุกคนเลือกก่อน
+  // logic การเริ่ม auction จะอยู่ใน event handler ของ selectCard แทน
+}
   
   // Wait for players to select cards (10 seconds)
   cardSelectionTimeout = setTimeout(() => {
@@ -983,13 +984,14 @@ function checkGameStatus() {
     io.emit('notification', 'Not enough players to continue. Game paused.');
   }
   
-  // If in card selection phase for too long, force start
-  if (gameState === 'cardSelection' && playerCards.size === players.filter(p => p.connected).length) {
-    console.log('All connected players have selected cards, starting auction');
-    gameState = 'auction';
-    io.emit('gameState', 'auction');
-    nextPokemon();
-  }
+  // ลบโค้ดที่บังคับเริ่ม auction ออก
+  // ไม่ต้องมีส่วนนี้แล้ว:
+  // if (gameState === 'cardSelection' && playerCards.size === players.filter(p => p.connected).length) {
+  //   console.log('All connected players have selected cards, starting auction');
+  //   gameState = 'auction';
+  //   io.emit('gameState', 'auction');
+  //   nextPokemon();
+  // }
 }
 
 // Run every 30 seconds
@@ -1218,7 +1220,7 @@ socket.on('selectCard', ({ cardIndex }, callback) => {
   }
   
   // If player already has a card, don't allow selecting another
-  if (playerCards.has(socket.id)) { // Changed from player.id to socket.id
+  if (playerCards.has(socket.id)) {
     callback({ success: false, message: 'You already selected a card' });
     return;
   }
@@ -1230,7 +1232,7 @@ socket.on('selectCard', ({ cardIndex }, callback) => {
   } while (assignedPositions.has(position));
   
   // Assign the position to the player
-  playerCards.set(socket.id, position); // Changed from player.id to socket.id
+  playerCards.set(socket.id, position);
   assignedPositions.add(position);
   
   // Send the card value back to the player
@@ -1240,10 +1242,18 @@ socket.on('selectCard', ({ cardIndex }, callback) => {
     value: position
   });
   
-  // Check if all connected players have selected cards
+  // แจ้งเตือนผู้เล่นทุกคนว่ามีคนเลือกการ์ดแล้ว และเหลืออีกกี่คน
   const connectedPlayers = players.filter(p => p.connected);
-  if (playerCards.size >= connectedPlayers.length) {
-    // If all players have selected, start auction phase immediately
+  const playersSelected = Array.from(playerCards.keys()).length;
+  const playersRemaining = connectedPlayers.length - playersSelected;
+  
+  io.emit('notification', `${player.name} has selected a card. Waiting for ${playersRemaining} more player(s).`);
+  
+  // Check if all connected players have selected cards
+  if (playersSelected >= connectedPlayers.length) {
+    // If all players have selected, start auction phase after a moment
+    io.emit('notification', 'All players have selected cards! Starting auction in 3 seconds...');
+    
     setTimeout(() => {
       gameState = 'auction';
       io.emit('gameState', 'auction');
@@ -1266,7 +1276,7 @@ socket.on('selectCard', ({ cardIndex }, callback) => {
       });
       
       nextPokemon();
-    }, 2000); // Wait briefly for UI to update before starting auction
+    }, 3000); // Wait 3 seconds before starting auction
   }
   
   callback({ success: true });
