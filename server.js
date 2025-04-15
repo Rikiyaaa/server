@@ -261,7 +261,7 @@ function startAuction() {
     gameState = 'auction';
     io.emit('gameState', 'auction');
     nextPokemon();
-  }, 10000);
+  }, 30000);
 
 // Function to get the next bidder in the cycle
 function getNextBidder() {
@@ -1181,11 +1181,6 @@ socket.on('login', ({ name }, callback) => {
     players.push(newPlayer);
     callback({ success: true, player: newPlayer });
   }
-  
-  // เริ่มเกมถ้ามีผู้เล่นเพียงพอ
-  if (players.length >= 3 && gameState === 'waiting') {
-    startAuction();
-  }
 });
   // เพิ่ม event listener สำหรับ pickPokemon ตรงนี้
   socket.on('pickPokemon', (data) => {
@@ -1396,7 +1391,7 @@ socket.on('joinGame', async ({ name }, callback) => {
   
   // Start card selection phase if enough players and in waiting state
   if (players.length >= 3 && gameState === 'waiting') {
-    setTimeout(startAuction, 1500); // Start the card selection phase after 3 seconds
+    setTimeout(startAuction, 4000); // Start the card selection phase after 3 seconds
   }
 });
   
