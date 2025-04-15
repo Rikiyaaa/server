@@ -255,7 +255,7 @@ function startAuction() {
     io.emit('gameState', 'auction');
     nextPokemon();
   }, 10000);
-}
+
 // Function to get the next bidder in the cycle
 function getNextBidder() {
   // If there are no positions or no players, return null
