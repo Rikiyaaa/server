@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const GameSchema = new mongoose.Schema({
   state: {
     type: String,
@@ -10,7 +9,7 @@ const GameSchema = new mongoose.Schema({
     id: String,
     name: String,
     balance: Number,
-    collection: [{
+    pokemonCollection: [{  // Updated field name to match Player model
       id: Number,
       name: String,
       image: String,
@@ -20,11 +19,11 @@ const GameSchema = new mongoose.Schema({
     skipsLeft: Number,
     bidPosition: Number,
     finalScore: Number,
-    connected: {      // เพิ่มฟิลด์เก็บสถานะการเชื่อมต่อ
+    connected: {
       type: Boolean,
       default: true
     },
-    disconnectedAt: { // เพิ่มเวลาที่ตัดการเชื่อมต่อ
+    disconnectedAt: {
       type: Date,
       default: null
     }
@@ -67,17 +66,17 @@ const GameSchema = new mongoose.Schema({
     default: 30
   },
   playerPositions: [String],
-  playerCards: {    // เพิ่มฟิลด์สำหรับเก็บข้อมูลการ์ดของผู้เล่น
+  playerCards: {
     type: Map,
     of: Number,
     default: {}
   },
-  skippedPlayers: [String],  // เพิ่มรายการผู้เล่นที่เลือกข้าม
+  skippedPlayers: [String],
   isConfirmationPhase: {
     type: Boolean,
     default: false
   },
-  lastUpdated: {    // เพิ่มเวลาล่าสุดที่อัปเดต
+  lastUpdated: {
     type: Date,
     default: Date.now
   },
@@ -87,5 +86,12 @@ const GameSchema = new mongoose.Schema({
   }
 });
 
-const Game = mongoose.model("Game", GameSchema);
-module.exports = Game;
+// Use a different pattern to check for existing models
+let GameModel;
+try {
+  GameModel = mongoose.model("Game");
+} catch (error) {
+  GameModel = mongoose.model("Game", GameSchema);
+}
+
+module.exports = GameModel;
