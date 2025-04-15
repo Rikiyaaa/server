@@ -291,7 +291,6 @@ function nextPokemon() {
   
   // Get the next Pokemon
   currentPokemon = auctionPool.pop();
-  poolPokemon.push(currentPokemon);
   currentBid = currentPokemon.basePrice || 100;
   currentBidder = null;
   
