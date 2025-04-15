@@ -189,8 +189,6 @@ async function initializeGame() {
   }
 }
 function startAuction() {
-
-   // เพิ่มโค้ดนี้
   console.log("Starting auction with pokemon count:", auctionPool.length);
   
   if (players.length < 3) {
@@ -202,13 +200,13 @@ function startAuction() {
   playerCards = new Map();
   assignedPositions = new Set();
   
+  // Change game state to card selection phase - but DON'T start any timers yet
   gameState = 'cardSelection';
   io.emit('selectCardsPhase');
   io.emit('notification', 'Please select your cards to determine bidding order!');
   
-  // ไม่ต้องมี timeout ที่จะบังคับเริ่ม auction
-  // แทนที่จะเริ่ม auction ด้วย timer เราจะรอให้ทุกคนเลือกก่อน
-  // logic การเริ่ม auction จะอยู่ใน event handler ของ selectCard แทน
+  // Remove the automatic timer that forces auction start
+  // We'll let the players select cards at their own pace
 }
   
   // Wait for players to select cards (10 seconds)
@@ -1207,174 +1205,135 @@ function handlePass(player) {
 }
    // Handle card selection
   // Update the selectCard event handler
-socket.on('selectCard', ({ cardIndex }, callback) => {
-  if (gameState !== 'cardSelection') {
-    callback({ success: false, message: 'Not in card selection phase' });
-    return;
-  }
-  
-  const player = players.find(p => p.id === socket.id);
-  if (!player) {
-    callback({ success: false, message: 'Player not found' });
-    return;
-  }
-  
-  // If player already has a card, don't allow selecting another
-  if (playerCards.has(socket.id)) {
-    callback({ success: false, message: 'You already selected a card' });
-    return;
-  }
-  
-  // Generate a random position (1-3) that hasn't been assigned yet
-  let position;
-  do {
-    position = Math.floor(Math.random() * 3) + 1;
-  } while (assignedPositions.has(position));
-  
-  // Assign the position to the player
-  playerCards.set(socket.id, position);
-  assignedPositions.add(position);
-  
-  // Send the card value back to the player
-  socket.emit('cardRevealed', {
-    playerId: socket.id,
-    cardIndex,
-    value: position
-  });
-  
-  // แจ้งเตือนผู้เล่นทุกคนว่ามีคนเลือกการ์ดแล้ว และเหลืออีกกี่คน
-  const connectedPlayers = players.filter(p => p.connected);
-  const playersSelected = Array.from(playerCards.keys()).length;
-  const playersRemaining = connectedPlayers.length - playersSelected;
-  
-  io.emit('notification', `${player.name} has selected a card. Waiting for ${playersRemaining} more player(s).`);
-  
-  // Check if all connected players have selected cards
-  if (playersSelected >= connectedPlayers.length) {
-    // If all players have selected, start auction phase after a moment
-    io.emit('notification', 'All players have selected cards! Starting auction in 3 seconds...');
+  socket.on('selectCard', ({ cardIndex }, callback) => {
+    if (gameState !== 'cardSelection') {
+      callback({ success: false, message: 'Not in card selection phase' });
+      return;
+    }
     
-    setTimeout(() => {
-      gameState = 'auction';
-      io.emit('gameState', 'auction');
-      
-      // Sort players by card value
-      playerPositions = [];
-      for (const player of players) {
-        if (playerCards.has(player.id)) {
-          playerPositions.push(player.id);
-        }
-      }
-      playerPositions.sort((a, b) => {
-        return playerCards.get(a) - playerCards.get(b);
-      });
-      
-      // Assign bidding positions to each player
-      players.forEach(player => {
-        const position = playerPositions.indexOf(player.id) + 1;
-        player.bidPosition = position;
-      });
-      
-      nextPokemon();
-    }, 3000); // Wait 3 seconds before starting auction
-  }
+    const player = players.find(p => p.id === socket.id);
+    if (!player) {
+      callback({ success: false, message: 'Player not found' });
+      return;
+    }
+    
+    // If player already has a card, don't allow selecting another
+    if (playerCards.has(socket.id)) {
+      callback({ success: false, message: 'You already selected a card' });
+      return;
+    }
+    
+    // Generate a random position (1-3) that hasn't been assigned yet
+    let position;
+    do {
+      position = Math.floor(Math.random() * 3) + 1;
+    } while (assignedPositions.has(position));
+    
+    // Assign the position to the player
+    playerCards.set(socket.id, position);
+    assignedPositions.add(position);
+    
+    // Send the card value back to the player
+    socket.emit('cardRevealed', {
+      playerId: socket.id,
+      cardIndex,
+      value: position
+    });
+   // Notify all players that someone has selected a card
+   const connectedPlayers = players.filter(p => p.connected);
+   const playersSelected = Array.from(playerCards.keys()).length;
+   const playersRemaining = connectedPlayers.length - playersSelected;
+   
+   io.emit('notification', `${player.name} has selected a card. Waiting for ${playersRemaining} more player(s).`);
+   
+   // Check if all connected players have selected cards
+   if (playersSelected >= connectedPlayers.length) {
+     // If all players have selected, start auction phase after a moment
+     io.emit('notification', 'All players have selected cards! Starting auction in 5 seconds...');
+     
+     setTimeout(() => {
+       gameState = 'auction';
+       io.emit('gameState', 'auction');
+       
+       // Sort players by card value
+       playerPositions = [];
+       for (const player of players) {
+         if (playerCards.has(player.id)) {
+           playerPositions.push(player.id);
+         }
+       }
+       playerPositions.sort((a, b) => {
+         return playerCards.get(a) - playerCards.get(b);
+       });
+       
+       // Assign bidding positions to each player
+       players.forEach(player => {
+         const position = playerPositions.indexOf(player.id) + 1;
+         player.bidPosition = position;
+       });
+       
+       // Now we start the actual auction with the first Pokemon
+       nextPokemon();
+     }, 5000); // Wait 5 seconds before starting auction (increased from 3s)
+   }
+   
+   callback({ success: true });
+ });
+
+// Modify the joinGame handler to not immediately start the auction
+socket.on('joinGame', async ({ name }, callback) => {
+  // [existing code for handling player joins...]
   
-  callback({ success: true });
+  // Instead of immediately starting the auction, give players a notification
+  // that they need to wait for the game to begin
+  if (players.length >= 3 && gameState === 'waiting') {
+    io.emit('notification', `${name} has joined. We have enough players to start! Game will begin shortly.`);
+    
+    // Add a 10 second buffer before starting the card selection phase
+    // This gives new players time to understand the interface
+    setTimeout(startAuction, 10000);
+  } else if (gameState === 'waiting') {
+    // If we don't have enough players yet
+    io.emit('notification', `${name} has joined. Need ${3 - players.length} more player(s) to start.`);
+  }
 });
 
-  // Handle player joining the game
- // Update the joinGame handler
-socket.on('joinGame', async ({ name }, callback) => {
-  // Check for existing player by name
-  const existingPlayerIndex = players.findIndex(p => p.name === name);
-  
-  if (existingPlayerIndex >= 0) {
-    // Player is reconnecting
-    const reconnectingPlayer = players[existingPlayerIndex];
-    
-    // Update socket ID and connection status
-    const oldId = reconnectingPlayer.id;
-    reconnectingPlayer.id = socket.id;
-    reconnectingPlayer.connected = true;
-    
-    // Update player ID in playerPositions array if needed
-    const posIndex = playerPositions.indexOf(oldId);
-    if (posIndex >= 0) {
-      playerPositions[posIndex] = socket.id;
-    }
-    
-    // Update player ID in playerCards map if needed
-    if (playerCards.has(oldId)) {
-      const cardValue = playerCards.get(oldId);
-      playerCards.delete(oldId);
-      playerCards.set(socket.id, cardValue);
-    }
-    
-    // If this player was the current bidder, update references
-    if (currentBidder === reconnectingPlayer.name) {
-      currentBidderTurn = reconnectingPlayer.name;
-    }
-    
-    // Send current game state to reconnected player
-    callback({ 
-      success: true, 
-      player: reconnectingPlayer,
-      gameState,
-      auctionState: gameState === 'auction' ? getAuctionState() : null,
-      cardValue: playerCards.has(socket.id) ? playerCards.get(socket.id) : null
-    });
-    
-    // If in card selection and player already selected, send card data
-    if (gameState === 'cardSelection' && playerCards.has(socket.id)) {
-      socket.emit('cardRevealed', {
-        playerId: socket.id,
-        cardIndex: 0, // Default value
-        value: playerCards.get(socket.id)
-      });
-    }
-    
-    // If in auction and it was this player's turn, send turn notification
-    if (gameState === 'auction' && currentBidderTurn === reconnectingPlayer.name) {
-      socket.emit('yourTurnToBid');
-    }
-    
-    console.log(`Player ${name} reconnected`);
-    io.emit('notification', `${name} has reconnected to the game.`);
-    
-    return;
-  } else if (gameState !== 'waiting') {
-    // Don't allow new players to join during game
-    callback({ success: false, message: 'Game already in progress. Please wait for the next round.' });
-    return;
-  } else {
-    // Create new player
-    const newPlayer = {
-      id: socket.id,
-      name,
-      balance: 5000,
-      collection: [],
-      skipsLeft: 2,
-      bidPosition: null,
-      connected: true
-    };
-    
-    players.push(newPlayer);
-    callback({ success: true, player: newPlayer });
-    
-    // Notify all clients about new player
-    io.emit('playerJoined', { 
-      playerId: newPlayer.id, 
-      playerName: newPlayer.name, 
-      playerCount: players.length 
-    });
-  }
-  
-  // Start auction if enough players and in waiting state
+// Add a "ready check" feature for starting new games
+// This tells players the auction is about to begin and gives them time to prepare
+function readyCheck() {
+  // Only run if we have enough players and are in waiting state
   if (players.length >= 3 && gameState === 'waiting') {
-    setTimeout(startAuction, 3000);
+    io.emit('notification', 'All players please prepare! Game will start in 10 seconds.');
+    io.emit('readyCheck', { countdown: 10 });
+    
+    // Start a countdown timer that clients can display
+    let countdown = 10;
+    const countdownInterval = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) {
+        clearInterval(countdownInterval);
+        startAuction();
+      } else {
+        io.emit('readyCheckUpdate', { countdown });
+      }
+    }, 1000);
+  }
+}
+  // Also add a "Start Game" button for admins or the first player
+socket.on('requestStartGame', () => {
+  const player = players.find(p => p.id === socket.id);
+  if (!player) return;
+  
+  // Check if we're in waiting state and have enough players
+  if (gameState === 'waiting' && players.length >= 3) {
+    io.emit('notification', `${player.name} has requested to start the game!`);
+    readyCheck();
+  } else if (players.length < 3) {
+    socket.emit('notification', `Need at least 3 players to start. Currently have ${players.length}.`);
+  } else {
+    socket.emit('notification', 'Game is already in progress.');
   }
 });
-  
 // Socket event handler for placeBid
 socket.on('placeBid', ({ amount }) => {
   // Prevent bidding during confirmation phase
