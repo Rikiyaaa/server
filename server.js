@@ -1396,7 +1396,7 @@ socket.on('joinGame', async ({ name }, callback) => {
   
   // Start card selection phase if enough players and in waiting state
   if (players.length >= 3 && gameState === 'waiting') {
-    setTimeout(startAuction, 3000); // Start the card selection phase after 3 seconds
+    setTimeout(startAuction, 15000); // Start the card selection phase after 3 seconds
   }
 });
   
