@@ -314,7 +314,7 @@ function nextPokemon() {
       }
       timeLeft--;
       updateAuctionState();
-    }, 1000);
+    }, 400);
   }, 3000); 
 }
 
