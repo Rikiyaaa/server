@@ -188,8 +188,12 @@ function checkCardsSelection() {
   const connectedPlayers = players.filter(p => p.connected);
   const playersSelected = Array.from(playerCards.keys()).length;
   
+  // Debug log to help diagnose the issue
+  console.log(`Players selected cards: ${playersSelected}/${connectedPlayers.length}`);
+  console.log('Player cards:', Array.from(playerCards.entries()));
+  
   if (playersSelected >= connectedPlayers.length) {
-    // แจ้งเตือนผู้เล่นว่าการเลือกการ์ดเสร็จสิ้นแล้ว
+    // All connected players have selected cards
     io.emit('notification', 'All players have selected cards! Vote to start the auction.');
     
     if (cardSelectionTimeout) {
