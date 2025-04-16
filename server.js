@@ -54,11 +54,11 @@ let startAuctionVotes = new Set(); // เก็บรายชื่อผู้
 let auctionVoteTimeout = null; // timeout สำหรับการโหวต
 let consecutivePasses = 0;
 
-function initializeGame(resetPlayers = false) {
+function initializeGame(resetPlayers = true) {
   // รีเซ็ตสถานะเกม
   gameState = 'waiting';
   
-  // รีเซ็ตผู้เล่นเฉพาะเมื่อจำเป็น
+  // รีเซ็ตผู้เล่นเสมอ
   if (resetPlayers) {
     players = []; // ล้างข้อมูลผู้เล่นทั้งหมด
   }
@@ -91,7 +91,7 @@ function initializeGame(resetPlayers = false) {
         {}, 
         { 
           state: gameState,
-          players: players, // ใช้รายชื่อผู้เล่นที่มีอยู่
+          players: [],  // ใช้อาร์เรย์ว่างเพื่อล้างผู้เล่นในฐานข้อมูล
           auctionPool,
           poolPokemon,
           currentPokemonIndex: null,
@@ -107,6 +107,7 @@ function initializeGame(resetPlayers = false) {
   
   io.emit('gameState', 'waiting');
   io.emit('notification', 'A new game is ready. Players can join now.');
+  io.emit('forceRejoin', true);  // แจ้งให้ client บังคับผู้เล่นทุกคนเข้าระบบใหม่
 }
 
 async function fetchRandomPokemon(count = 18) {
@@ -894,7 +895,7 @@ function finalizeGame() {
   
   // เริ่มเกมใหม่หลังจากดีเลย์ แต่ไม่ลบข้อมูลผู้เล่น
   setTimeout(() => {
-    resetGame(true);  // ส่ง true เพื่อเก็บผู้เล่นไว้
+    resetGame(false);  // ส่ง true เพื่อเก็บผู้เล่นไว้
   }, 15000);
 }
 // Add to the server code to check for empty games
@@ -959,7 +960,7 @@ function checkPlayerConnections() {
 // ตรวจสอบการเชื่อมต่อของผู้เล่นทุก 5 วินาที
 setInterval(checkPlayerConnections, 5000);
 // แก้ไขฟังก์ชัน resetGame 
-function resetGame(keepPlayers = true) {  // เปลี่ยนค่าเริ่มต้นเป็น true
+function resetGame(keepPlayers = false) {  // เปลี่ยนค่าเริ่มต้นเป็น false
   // Clear votes
   resetVotes.clear();
   externalVoters.clear();
@@ -967,18 +968,8 @@ function resetGame(keepPlayers = true) {  // เปลี่ยนค่าเ�
   clearTimeout(resetVoteTimeout);
   clearTimeout(auctionVoteTimeout);
   
-  if (!keepPlayers) {
-    // Clear all player data เฉพาะเมื่อจำเป็น
-    players = [];
-  } else {
-    // รีเซ็ตข้อมูลผู้เล่นแต่ไม่ลบผู้เล่นออก
-    players.forEach(player => {
-      player.balance = 5000;
-      player.collection = [];
-      player.skipsLeft = 2;
-      player.bidPosition = null;
-    });
-  }
+  // ลบข้อมูลผู้เล่นเสมอเมื่อรีเซ็ต
+  players = [];
   
   // Reset game variables
   gameState = 'waiting';
@@ -1003,14 +994,11 @@ function resetGame(keepPlayers = true) {  // เปลี่ยนค่าเ�
   cardSelectionTimeout = null;
   
   // Start new game
-  if (keepPlayers) {
-    initializeGameKeepPlayers();
-  } else {
-    initializeGame(false);  // ส่งพารามิเตอร์เป็น false เพื่อไม่ให้รีเซ็ตผู้เล่น
-    // Notify everyone
-    io.emit('gameState', 'waiting');
-    io.emit('notification', 'Game has been reset. All players can continue playing.');
-  }
+  initializeGame(true);  // ส่งพารามิเตอร์เป็น true เพื่อให้รีเซ็ตผู้เล่น
+  
+  // Notify everyone
+  io.emit('gameState', 'waiting');
+  io.emit('notification', 'Game has been reset. All players need to rejoin.');
 }
 
 // Process votes and check if reset should happen
