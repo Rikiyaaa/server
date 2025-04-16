@@ -497,26 +497,33 @@ function updateAuctionState() {
 
 // Update to handleSkip function
 function handleSkip(player) {
+  // Only allow skipping if it's the player's turn
   if (currentBidderTurn !== player.name) {
     return { success: false, message: "It's not your turn to skip" };
   }
   
+  // Use up a skip if the player has any left
   if (player.skipsLeft > 0) {
     player.skipsLeft--;
     io.emit('bidNotification', `${player.name} skipped their turn and is out for this auction. (${player.skipsLeft} skips left)`);
     
+    // Send the updated player data to all clients
     io.emit('playerUpdate', player);
     
-    if (!skippedPlayers) skippedPlayers = [];
-    skippedPlayers.push(player.id);
+    // Remove this player from the current auction cycle
+    const playerIndex = playerPositions.indexOf(player.id);
+    if (playerIndex !== -1) {
+      // Store skipped players in a temporary array for this auction
+      if (!skippedPlayers) skippedPlayers = [];
+      skippedPlayers.push(player.id);
+    }
     
+    // Move to the next bidder
     setNextBidder();
-    return { success: true };
   } else {
-    return { success: false, message: "You have no skips left" };
+    io.emit('bidNotification', `${player.name} has no skips left and must bid or pass.`);
   }
 }
-
 function handleBid(player, amount) {
   // Validate that it's the player's turn
   if (currentBidderTurn !== player.name) {
