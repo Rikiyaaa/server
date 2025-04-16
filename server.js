@@ -54,10 +54,15 @@ let startAuctionVotes = new Set(); // เก็บรายชื่อผู้
 let auctionVoteTimeout = null; // timeout สำหรับการโหวต
 let consecutivePasses = 0;
 
-function initializeGame() {
+function initializeGame(resetPlayers = false) {
   // รีเซ็ตสถานะเกม
   gameState = 'waiting';
-  players = []; // ล้างข้อมูลผู้เล่นทั้งหมด
+  
+  // รีเซ็ตผู้เล่นเฉพาะเมื่อจำเป็น
+  if (resetPlayers) {
+    players = []; // ล้างข้อมูลผู้เล่นทั้งหมด
+  }
+  
   currentPokemon = null;
   auctionPool = [];
   poolPokemon = [];
@@ -86,7 +91,7 @@ function initializeGame() {
         {}, 
         { 
           state: gameState,
-          players: [],
+          players: players, // ใช้รายชื่อผู้เล่นที่มีอยู่
           auctionPool,
           poolPokemon,
           currentPokemonIndex: null,
@@ -162,12 +167,14 @@ function processStartAuctionVotes() {
       
       playerPositions = [];
       for (const player of players) {
-        if (playerCards.has(player.id)) {
+        if (playerCards.has(player.name)) {  // เปลี่ยนจาก player.id เป็น player.name
           playerPositions.push(player.id);
         }
       }
       playerPositions.sort((a, b) => {
-        return playerCards.get(a) - playerCards.get(b);
+        const playerA = players.find(p => p.id === a);
+        const playerB = players.find(p => p.id === b);
+        return playerCards.get(playerA.name) - playerCards.get(playerB.name);
       });
       
       players.forEach(player => {
@@ -273,13 +280,13 @@ function nextPokemon() {
   io.emit('bidNotification', 'Next Pokemon will be revealed in 5 seconds...');
   
   setTimeout(() => {
-
     skippedPlayers = [];
 
     currentPokemon = auctionPool.pop();
     currentBid = currentPokemon.basePrice || 100;
     currentBidder = null;
     
+    // ตรวจสอบว่ามีผู้เล่นที่สามารถประมูลได้หรือไม่
     const anyPlayerCanAfford = players.some(player => player.balance >= currentBid);
     
     const isPreviewMode = !anyPlayerCanAfford;
@@ -289,8 +296,10 @@ function nextPokemon() {
 
     if (isPreviewMode) {
       io.emit('bidNotification', `No player can afford ${currentPokemon.name}. Preview mode activated (10s).`);
+      currentBidderTurn = null;
     } else {
       io.emit('bidNotification', `${currentPokemon.name} is now up for auction! Starting bid: ${currentBid} coins.`);
+      setNextBidder();
     }
 
     updateAuctionState();
@@ -305,14 +314,6 @@ function nextPokemon() {
       timeLeft--;
       updateAuctionState();
     }, 1000);
-    
-    if (!isPreviewMode) {
-      setNextBidder();
-    } else {
-
-      currentBidderTurn = null;
-      io.emit('auctionUpdate', getAuctionState());
-    }
   }, 3000); 
 }
 
@@ -447,10 +448,8 @@ function handlePurchaseConfirmation(player, confirm) {
     poolPokemon.push(currentPokemon);
   }
   
-  // Now that confirmation is complete, move to next Pokemon
   nextPokemon();
 }
-// Update getAuctionState to include the preview mode flag
 function getAuctionState() {
   const anyPlayerCanAfford = players.some(player => player.balance >= currentBid);
   const isPreviewMode = !anyPlayerCanAfford && currentPokemon;
@@ -468,8 +467,6 @@ function getAuctionState() {
   };
 }
 
-// Function to update auction state
-// Modify updateAuctionState to include preview mode status
 function updateAuctionState() {
   const anyPlayerCanAfford = players.some(player => player.balance >= currentBid);
   const isPreviewMode = !anyPlayerCanAfford && currentPokemon;
@@ -479,7 +476,6 @@ function updateAuctionState() {
     isPreviewMode
   });
   
-  // Also update the game state in the database
   try {
     Game.findOneAndUpdate(
       {}, 
@@ -499,14 +495,11 @@ function updateAuctionState() {
   }
 }
 
-// Update to handleSkip function
 function handleSkip(player) {
-  // Only allow skipping if it's the player's turn
   if (currentBidderTurn !== player.name) {
     return { success: false, message: "It's not your turn to skip" };
   }
   
-  // Use up a skip if the player has any left
   if (player.skipsLeft > 0) {
     player.skipsLeft--;
     io.emit('bidNotification', `${player.name} skipped their turn and is out for this auction. (${player.skipsLeft} skips left)`);
@@ -897,13 +890,11 @@ function finalizeGame() {
   });
   
   // แจ้งผู้เล่นว่าเกมใหม่จะเริ่มในไม่ช้า
-  io.emit('notification', 'Game complete! A new game will start shortly. You will need to join again.');
+  io.emit('notification', 'Game complete! A new game will start shortly. You can continue playing.');
   
-  // เริ่มเกมใหม่หลังจากดีเลย์
+  // เริ่มเกมใหม่หลังจากดีเลย์ แต่ไม่ลบข้อมูลผู้เล่น
   setTimeout(() => {
-    // ล้างข้อมูลเกมทั้งหมด รวมถึงผู้เล่น
-    players = [];
-    resetGame();
+    resetGame(true);  // ส่ง true เพื่อเก็บผู้เล่นไว้
   }, 15000);
 }
 // Add to the server code to check for empty games
@@ -915,9 +906,6 @@ function checkEmptyGame() {
   // If fewer than 3 players remaining, cancel the game
   if (players.length < 3) {
     console.log('Less than 3 players remaining, resetting game but keeping players');
-    
-    // Reset game but keep remaining players
-    resetGame(true);
     
     // Notify remaining players
     io.emit('notification', 'Not enough players to continue. Game has been reset to waiting state.');
@@ -971,7 +959,7 @@ function checkPlayerConnections() {
 // ตรวจสอบการเชื่อมต่อของผู้เล่นทุก 5 วินาที
 setInterval(checkPlayerConnections, 5000);
 // แก้ไขฟังก์ชัน resetGame 
-function resetGame(keepPlayers = false) {
+function resetGame(keepPlayers = true) {  // เปลี่ยนค่าเริ่มต้นเป็น true
   // Clear votes
   resetVotes.clear();
   externalVoters.clear();
@@ -980,8 +968,16 @@ function resetGame(keepPlayers = false) {
   clearTimeout(auctionVoteTimeout);
   
   if (!keepPlayers) {
-    // Clear all player data
+    // Clear all player data เฉพาะเมื่อจำเป็น
     players = [];
+  } else {
+    // รีเซ็ตข้อมูลผู้เล่นแต่ไม่ลบผู้เล่นออก
+    players.forEach(player => {
+      player.balance = 5000;
+      player.collection = [];
+      player.skipsLeft = 2;
+      player.bidPosition = null;
+    });
   }
   
   // Reset game variables
@@ -1010,10 +1006,10 @@ function resetGame(keepPlayers = false) {
   if (keepPlayers) {
     initializeGameKeepPlayers();
   } else {
-    initializeGame();
+    initializeGame(false);  // ส่งพารามิเตอร์เป็น false เพื่อไม่ให้รีเซ็ตผู้เล่น
     // Notify everyone
     io.emit('gameState', 'waiting');
-    io.emit('notification', 'Game has been reset. All players need to join again.');
+    io.emit('notification', 'Game has been reset. All players can continue playing.');
   }
 }
 
@@ -1063,6 +1059,15 @@ function initializeGameKeepPlayers() {
   resetVotes.clear();
   startAuctionVotes.clear();
   
+  // รีเซ็ตข้อมูลผู้เล่นแต่ละคนเพื่อเริ่มเกมใหม่ แต่เก็บผู้เล่นไว้
+  players.forEach(player => {
+    // รีเซ็ตเฉพาะข้อมูลที่จำเป็น แต่เก็บชื่อและการเชื่อมต่อไว้
+    player.balance = 5000;
+    player.collection = [];
+    player.skipsLeft = 2;
+    player.bidPosition = null;
+  });
+  
   clearInterval(auctionTimer);
   clearTimeout(bidderTimeout);
   clearTimeout(confirmTimeout);
@@ -1098,7 +1103,8 @@ function initializeGameKeepPlayers() {
   io.emit('notification', 'The game has reset. Ready to start when you are!');
   
   // Tell remaining players how many more players needed
-  const remainingPlayers = players.length;
+  const connectedPlayers = players.filter(p => p.connected);
+  const remainingPlayers = connectedPlayers.length;
   if (remainingPlayers < 3) {
     io.emit('notification', `We need ${3 - remainingPlayers} more player(s) to start.`);
   } else {
@@ -1437,58 +1443,32 @@ socket.on('disconnect', () => {
   checkGameState();
   clearInterval(heartbeatInterval);
   
-  // Find the disconnected player
   const playerIndex = players.findIndex(p => p.id === socket.id);
   if (playerIndex >= 0) {
     const player = players[playerIndex];
     
-    // Instead of removing, just mark as disconnected
     player.connected = false;
     
-    // Notify other players about the departure
     io.emit('bidNotification', `${player.name} has disconnected from the game.`);
     
-    // If it's the current bidder's turn, move to next bidder
     if (currentBidderTurn === player.name) {
       io.emit('bidNotification', `${player.name} was the current bidder and has disconnected. Moving to next player.`);
       setNextBidder();
     }
     
-    // Count active players
     const activePlayerCount = players.filter(p => p.connected).length;
     
-    // Check if there are still enough players to continue the game
     if (activePlayerCount < 3 && gameState !== 'waiting') {
       io.emit('notification', 'Not enough active players to continue. Game will reset to waiting state.');
       
-      // Transition to waiting state
       gameState = 'waiting';
-      currentPokemon = null;
-      auctionPool = [];
-      poolPokemon = [];
-      currentBid = 0;
-      currentBidder = null;
-      currentBidderTurn = null;
-      playerPositions = [];
-      skippedPlayers = [];
       
-      // Clear any active timers
-      clearInterval(auctionTimer);
-      clearTimeout(bidderTimeout);
-      clearTimeout(confirmTimeout);
-      if (cardSelectionTimeout) {
-        clearTimeout(cardSelectionTimeout);
-        cardSelectionTimeout = null;
-      }
-      
-      // Reset the game but KEEP THE REMAINING PLAYERS
+      // ไม่ลบผู้เล่นทั้งหมด แต่ใช้ initializeGameKeepPlayers แทน
       initializeGameKeepPlayers();
       
-      // Tell ALL clients to go back to the waiting state
       io.emit('gameState', 'waiting');
       io.emit('forceRejoin', true);
     } else {
-      // If still enough players, just update the auction state
       updateAuctionState();
     }
   }
@@ -1505,7 +1485,6 @@ app.get('/api/game/status', (req, res) => {
   });
 });
 
-// Initialize the game when the server starts
 initializeGame();
 
 const PORT = process.env.PORT || 5000;
